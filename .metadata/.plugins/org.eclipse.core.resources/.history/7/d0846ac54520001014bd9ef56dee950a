@@ -1,0 +1,385 @@
+package safenote;
+
+import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
+import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.io.File;
+import java.nio.file.Files;
+import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.Date;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import java.io.FileWriter;
+import java.nio.charset.StandardCharsets;
+import javax.swing.event.ListSelectionEvent;
+import javax.swing.event.ListSelectionListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+
+public class SafeNote extends JFrame {
+
+	private static final long serialVersionUID = 1L;
+	private JTable noteListTable;
+    private DefaultTableModel tableModel;
+    private JTextArea noteTextArea;
+    private JButton createNoteButton;
+    private JButton deleteNoteButton;
+    private JButton openNoteButton;
+    private JButton saveNoteButton;
+    private JButton refreshButton;
+    private final String NOTELIST_FILE = "notelist.json";
+    private JLabel statusLabel;
+    private final String BLOG_URL = "https://tutoreducto.tistory.com/";
+
+    public SafeNote() {
+        setTitle("SafeNote");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setSize(800, 600);
+        setResizable(false);
+
+        setLayout(new BorderLayout());
+
+        JPanel leftPanel = new JPanel(new BorderLayout());
+
+        JPanel topButtonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        refreshButton = new JButton("새로고침");
+        topButtonPanel.add(refreshButton);
+        leftPanel.add(topButtonPanel, BorderLayout.NORTH);
+
+        String[] columnNames = {"이름", "경로", "수정일자", "크기"};
+        tableModel = new DefaultTableModel(columnNames, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        noteListTable = new JTable(tableModel);
+        JScrollPane tableScrollPane = new JScrollPane(noteListTable);
+        leftPanel.add(tableScrollPane, BorderLayout.CENTER);
+
+        JPanel bottomButtonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        createNoteButton = new JButton("새 노트");
+        deleteNoteButton = new JButton("삭제");
+        openNoteButton = new JButton("열기");
+        saveNoteButton = new JButton("저장");
+
+        bottomButtonPanel.add(createNoteButton);
+        bottomButtonPanel.add(deleteNoteButton);
+        bottomButtonPanel.add(openNoteButton);
+        bottomButtonPanel.add(saveNoteButton);
+        leftPanel.add(bottomButtonPanel, BorderLayout.SOUTH);
+
+        add(leftPanel, BorderLayout.WEST);
+
+        noteTextArea = new JTextArea();
+        noteTextArea.setEnabled(false);
+        JScrollPane textAreaScrollPane = new JScrollPane(noteTextArea);
+        add(textAreaScrollPane, BorderLayout.CENTER);
+
+        noteListTable.getSelectionModel().addListSelectionListener(new ListSelectionListener() {
+            @Override
+            public void valueChanged(ListSelectionEvent event) {
+                if (!event.getValueIsAdjusting()) {
+                    boolean isRowSelected = noteListTable.getSelectedRow() != -1;
+                    noteTextArea.setEnabled(isRowSelected);
+                    if (!isRowSelected) {
+                        noteTextArea.setText("");
+                    }
+                }
+            }
+        });
+
+        noteListTable.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2) {
+                    int selectedRow = noteListTable.getSelectedRow();
+                    if (selectedRow >= 0) {
+                        String filePath = (String) tableModel.getValueAt(selectedRow, 1);
+                        String noteName = (String) tableModel.getValueAt(selectedRow, 0);
+                        PasswordInputDialog passwordDialog = new PasswordInputDialog(SafeNote.this, "노트 열기 - " + noteName);
+                        passwordDialog.setVisible(true);
+                        String password = passwordDialog.getPassword();
+
+                        if (password != null) {
+                            try {
+                                byte[] encryptedDataWithIv = Files.readAllBytes(new File(filePath).toPath());
+                                String decryptedContent = CryptoUtils.decrypt(encryptedDataWithIv, password);
+                                noteTextArea.setText(decryptedContent);
+                            } catch (Exception ex) {
+                                JOptionPane.showMessageDialog(SafeNote.this, "노트를 여는 데 실패했습니다: " + ex.getMessage(), "오류", JOptionPane.ERROR_MESSAGE);
+                                ex.printStackTrace();
+                            }
+                        }
+                    } else {
+                        JOptionPane.showMessageDialog(SafeNote.this, "열 노트를 먼저 선택해주세요.", "알림", JOptionPane.WARNING_MESSAGE);
+                    }
+                }
+            }
+        });
+
+        refreshButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                checkAndRefreshNoteList();
+            }
+        });
+
+        createNoteButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                NewNoteDialog dialog = new NewNoteDialog(SafeNote.this);
+                dialog.setVisible(true);
+
+                if (dialog.isCreated()) {
+                    String noteName = dialog.getNoteName();
+                    String password = dialog.getPassword();
+                    String filePath = dialog.getFilePath();
+                    String dummyContent = "";
+
+                    try {
+                        CryptoUtils.encrypt(dummyContent, password, filePath);
+                        File newFile = new File(filePath);
+                        addNoteToTable(noteName, filePath, new Date(newFile.lastModified()), newFile.length());
+                        saveNoteList();
+                        JOptionPane.showMessageDialog(SafeNote.this, "새 노트가 성공적으로 생성되었습니다.", "성공", JOptionPane.INFORMATION_MESSAGE);
+                    } catch (Exception ex) {
+                        JOptionPane.showMessageDialog(SafeNote.this, "노트 생성에 실패했습니다", "오류", JOptionPane.ERROR_MESSAGE);
+                        ex.printStackTrace();
+                    }
+                }
+            }
+        });
+
+        openNoteButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                int selectedRow = noteListTable.getSelectedRow();
+                if (selectedRow >= 0) {
+                    String filePath = (String) tableModel.getValueAt(selectedRow, 1);
+                    String noteName = (String) tableModel.getValueAt(selectedRow, 0);
+                    PasswordInputDialog passwordDialog = new PasswordInputDialog(SafeNote.this, "노트 열기 - " + noteName);
+                    passwordDialog.setVisible(true);
+                    String password = passwordDialog.getPassword();
+
+                    if (password != null) {
+                        try {
+                            byte[] encryptedDataWithIv = Files.readAllBytes(new File(filePath).toPath());
+                            String decryptedContent = CryptoUtils.decrypt(encryptedDataWithIv, password);
+                            noteTextArea.setText(decryptedContent);
+                        } catch (Exception ex) {
+                            JOptionPane.showMessageDialog(SafeNote.this, "노트를 여는 데 실패했습니다", "오류", JOptionPane.ERROR_MESSAGE);
+                            ex.printStackTrace();
+                        }
+                    }
+                } else {
+                    JOptionPane.showMessageDialog(SafeNote.this, "열 노트를 먼저 선택해주세요.", "알림", JOptionPane.WARNING_MESSAGE);
+                }
+            }
+        });
+
+        saveNoteButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                int selectedRow = noteListTable.getSelectedRow();
+                if (selectedRow >= 0) {
+                    String filePath = (String) tableModel.getValueAt(selectedRow, 1);
+                    String noteName = (String) tableModel.getValueAt(selectedRow, 0);
+                    PasswordInputDialog passwordDialog = new PasswordInputDialog(SafeNote.this, "노트 저장 - " + noteName);
+                    passwordDialog.setVisible(true);
+                    String password = passwordDialog.getPassword();
+
+                    if (password != null) {
+                        try {
+                            CryptoUtils.saveEncryptedContent(noteTextArea.getText(), password, filePath);
+                            File savedFile = new File(filePath);
+                            tableModel.setValueAt(new Date(savedFile.lastModified()), selectedRow, 2);
+                            tableModel.setValueAt(String.format("%.2f KB", (double) savedFile.length() / 1024), selectedRow, 3);
+                            saveNoteList();
+                            JOptionPane.showMessageDialog(SafeNote.this, "노트가 성공적으로 저장되었습니다.", "성공", JOptionPane.INFORMATION_MESSAGE);
+                        } catch (Exception ex) {
+                            JOptionPane.showMessageDialog(SafeNote.this, "노트 저장에 실패했습니다" , "오류", JOptionPane.ERROR_MESSAGE);
+                            ex.printStackTrace();
+                        }
+                    }
+                } else {
+                    JOptionPane.showMessageDialog(SafeNote.this, "저장할 노트를 먼저 선택해주세요.", "알림", JOptionPane.WARNING_MESSAGE);
+                }
+            }
+        });
+
+        deleteNoteButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                int selectedRow = noteListTable.getSelectedRow();
+                if (selectedRow >= 0) {
+                    String filePath = (String) tableModel.getValueAt(selectedRow, 1);
+                    String noteName = (String) tableModel.getValueAt(selectedRow, 0);
+
+                    int confirmation = JOptionPane.showConfirmDialog(
+                            SafeNote.this,
+                            "'" + noteName + "' 노트를 삭제하시겠습니까?",
+                            "삭제 확인",
+                            JOptionPane.YES_NO_OPTION
+                    );
+
+                    if (confirmation == JOptionPane.YES_OPTION) {
+                        File fileToDelete = new File(filePath);
+                        if (fileToDelete.delete()) {
+                            tableModel.removeRow(selectedRow);
+                            noteTextArea.setText("");
+                            saveNoteList();
+                            JOptionPane.showMessageDialog(SafeNote.this, "'" + noteName + "' 노트가 삭제되었습니다.", "삭제 완료", JOptionPane.INFORMATION_MESSAGE);
+                        } else {
+                            JOptionPane.showMessageDialog(SafeNote.this, "노트 삭제에 실패했습니다.", "오류", JOptionPane.ERROR_MESSAGE);
+                        }
+                    }
+                } else {
+                    JOptionPane.showMessageDialog(SafeNote.this, "삭제할 노트를 먼저 선택해주세요.", "알림", JOptionPane.WARNING_MESSAGE);
+                }
+            }
+        });
+
+        loadNoteList();
+        
+
+        JPanel statusBar = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        statusLabel = new JLabel("제작자 블로그 : " + BLOG_URL);
+        statusLabel.setForeground(Color.GRAY);
+        statusLabel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)); // 마우스 오버 시 커서 변경
+        statusLabel.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                openWebpage(BLOG_URL);
+            }
+        });
+        statusBar.add(statusLabel);
+        add(statusBar, BorderLayout.SOUTH);
+
+        setVisible(true);
+    }
+    
+
+    // 웹페이지 열기 메서드
+    private void openWebpage(String url) {
+        try {
+            URI uri = new URI(url);
+            Desktop.getDesktop().browse(uri);
+        } catch (URISyntaxException | IOException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "웹페이지를 열 수 없습니다.", "오류", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void addNoteToTable(String name, String path, Date lastModified, long size) {
+        tableModel.addRow(new Object[]{name, path, lastModified, String.format("%.2f KB", (double) size / 1024)});
+    }
+
+    private void saveNoteList() {
+        JSONArray noteListJson = new JSONArray();
+        for (int i = 0; i < tableModel.getRowCount(); i++) {
+            JSONObject noteInfo = new JSONObject();
+            noteInfo.put("name", tableModel.getValueAt(i, 0));
+            noteInfo.put("path", tableModel.getValueAt(i, 1));
+            noteListJson.put(noteInfo);
+        }
+
+        try (FileWriter fileWriter = new FileWriter(NOTELIST_FILE, StandardCharsets.UTF_8)) {
+            fileWriter.write(noteListJson.toString(2));
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(this, "노트 목록 저장에 실패했습니다: " + e.getMessage(), "오류", JOptionPane.ERROR_MESSAGE);
+            e.printStackTrace();
+        }
+    }
+
+    private void loadNoteList() {
+        File file = new File(NOTELIST_FILE);
+        if (file.exists()) {
+            try {
+                String content = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
+                JSONArray noteListJson = new JSONArray(content);
+                for (int i = 0; i < noteListJson.length(); i++) {
+                    JSONObject noteInfo = noteListJson.getJSONObject(i);
+                    String name = noteInfo.getString("name");
+                    String path = noteInfo.getString("path");
+                    File noteFile = new File(path);
+                    if (noteFile.exists()) {
+                        addNoteToTable(name, path, new Date(noteFile.lastModified()), noteFile.length());
+                    }
+                }
+            } catch (IOException e) {
+                JOptionPane.showMessageDialog(this, "노트 목록을 불러오는 데 실패했습니다: " + e.getMessage(), "오류", JOptionPane.ERROR_MESSAGE);
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private void checkAndRefreshNoteList() {
+        for (int i = tableModel.getRowCount() - 1; i >= 0; i--) {
+            String filePath = (String) tableModel.getValueAt(i, 1);
+            File noteFile = new File(filePath);
+            if (!noteFile.exists()) {
+                tableModel.removeRow(i);
+            }
+        }
+        saveNoteList();
+    }
+
+    static class PasswordInputDialog extends JDialog {
+        private JPasswordField passwordField;
+        private JButton okButton;
+        private JButton cancelButton;
+        private String password;
+
+        public PasswordInputDialog(JFrame owner, String title) {
+            super(owner, title, true);
+            setLayout(new FlowLayout());
+            setPreferredSize(new Dimension(300, 120));
+
+            JLabel passwordLabel = new JLabel("비밀번호:");
+            passwordField = new JPasswordField();
+            passwordField.setPreferredSize(new Dimension(200, 25));
+
+            okButton = new JButton("확인");
+            cancelButton = new JButton("취소");
+
+            okButton.addActionListener(new ActionListener() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    password = new String(passwordField.getPassword());
+                    setVisible(false);
+                    dispose();
+                }
+            });
+
+            cancelButton.addActionListener(new ActionListener() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    password = null;
+                    setVisible(false);
+                    dispose();
+                }
+            });
+
+            add(passwordLabel);
+            add(passwordField);
+            add(okButton);
+            add(cancelButton);
+
+            pack();
+            setLocationRelativeTo(owner);
+        }
+
+        public String getPassword() {
+            return password;
+        }
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> new SafeNote());
+    }
+}

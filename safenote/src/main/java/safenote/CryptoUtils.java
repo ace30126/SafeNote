@@ -1,0 +1,65 @@
+package safenote;
+
+import javax.crypto.Cipher;
+import javax.crypto.spec.SecretKeySpec;
+import javax.crypto.spec.IvParameterSpec;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
+import javax.crypto.SecretKey;
+import java.io.FileOutputStream;
+
+public class CryptoUtils {
+
+    private static final String ALGORITHM = "AES";
+    private static final String TRANSFORMATION = "AES/CBC/PKCS5Padding";
+    private static final String HASH_ALGORITHM = "SHA-256";
+    private static final int KEY_SIZE = 32; // 256 bits
+    private static final int IV_SIZE = 16; // 128 bits
+
+    public static void encrypt(String content, String password, String filePath) throws Exception {
+        SecretKey secretKey = generateKey(password);
+        IvParameterSpec iv = generateIv();
+        Cipher cipher = Cipher.getInstance(TRANSFORMATION);
+        cipher.init(Cipher.ENCRYPT_MODE, secretKey, iv);
+        byte[] encryptedBytes = cipher.doFinal(content.getBytes(StandardCharsets.UTF_8));
+
+        // IV와 암호화된 데이터를 함께 파일에 저장
+        try (FileOutputStream fos = new FileOutputStream(filePath)) {
+            fos.write(iv.getIV());
+            fos.write(encryptedBytes);
+        }
+    }
+
+    public static String decrypt(byte[] encryptedDataWithIv, String password) throws Exception {
+        byte[] ivBytes = Arrays.copyOfRange(encryptedDataWithIv, 0, IV_SIZE);
+        byte[] encryptedBytes = Arrays.copyOfRange(encryptedDataWithIv, IV_SIZE, encryptedDataWithIv.length);
+        SecretKey secretKey = generateKey(password);
+        IvParameterSpec iv = new IvParameterSpec(ivBytes);
+        Cipher cipher = Cipher.getInstance(TRANSFORMATION);
+        cipher.init(Cipher.DECRYPT_MODE, secretKey, iv);
+        byte[] decryptedBytes = cipher.doFinal(encryptedBytes);
+        return new String(decryptedBytes, StandardCharsets.UTF_8);
+    }
+
+    private static SecretKey generateKey(String password) throws NoSuchAlgorithmException {
+        MessageDigest digest = MessageDigest.getInstance(HASH_ALGORITHM);
+        byte[] keyBytes = digest.digest(password.getBytes(StandardCharsets.UTF_8));
+        keyBytes = Arrays.copyOf(keyBytes, KEY_SIZE); // 256 bits
+        return new SecretKeySpec(keyBytes, ALGORITHM);
+    }
+
+    private static IvParameterSpec generateIv() {
+        byte[] iv = new byte[IV_SIZE];
+        // SecureRandom을 사용하여 더 안전한 IV 생성 고려
+        java.util.Random random = new java.util.Random();
+        random.nextBytes(iv);
+        return new IvParameterSpec(iv);
+    }
+    
+
+    public static void saveEncryptedContent(String content, String password, String filePath) throws Exception {
+        encrypt(content, password, filePath); // 기존 암호화 메서드 재사용
+    }
+}

@@ -1,0 +1,75 @@
+package safenote;
+
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+
+public class NewNoteDialog extends JDialog {
+
+    private JTextField noteNameField;
+    private JPasswordField passwordField;
+    private JButton createButton;
+    private JButton cancelButton;
+    private boolean isCreated = false;
+    private String noteName;
+    private String password;
+
+    public NewNoteDialog(JFrame owner) {
+        super(owner, "새 노트 생성", true); // true: 모달 다이얼로그
+
+        setLayout(new GridLayout(3, 2, 5, 5)); // 3행 2열의 GridLayout
+        setPreferredSize(new Dimension(300, 150));
+
+        JLabel nameLabel = new JLabel("노트 이름:");
+        noteNameField = new JTextField();
+        JLabel passwordLabel = new JLabel("비밀번호:");
+        passwordField = new JPasswordField();
+        createButton = new JButton("생성");
+        cancelButton = new JButton("취소");
+
+        add(nameLabel);
+        add(noteNameField);
+        add(passwordLabel);
+        add(passwordField);
+        add(createButton);
+        add(cancelButton);
+
+        // "생성" 버튼 액션 리스너
+        createButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                noteName = noteNameField.getText();
+                password = new String(passwordField.getPassword());
+                isCreated = true;
+                setVisible(false); // 다이얼로그 닫기
+                dispose(); // 자원 해제
+            }
+        });
+
+        // "취소" 버튼 액션 리스너
+        cancelButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                isCreated = false;
+                setVisible(false); // 다이얼로그 닫기
+                dispose(); // 자원 해제
+            }
+        });
+
+        pack(); // 컴포넌트 크기에 맞춰 다이얼로그 크기 조정
+        setLocationRelativeTo(owner); // 부모 프레임 중앙에 다이얼로그 표시
+    }
+
+    public boolean isCreated() {
+        return isCreated;
+    }
+
+    public String getNoteName() {
+        return noteName;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+}

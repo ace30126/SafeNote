@@ -1,0 +1,150 @@
+package safenote;
+
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+
+public class NewNoteDialog extends JDialog {
+
+    private JTextField noteNameField;
+    private JPasswordField passwordField;
+    private JTextField filePathField;
+    private JButton browseButton;
+    private JButton createButton;
+    private JButton cancelButton;
+    private boolean isCreated = false;
+    private String noteName;
+    private String password;
+    private String filePath;
+
+    public NewNoteDialog(JFrame owner) {
+        super(owner, "새 노트 생성", true);
+
+        setLayout(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+
+        JLabel nameLabel = new JLabel("노트 이름:");
+        JLabel passwordLabel = new JLabel("비밀번호:");
+        JLabel pathLabel = new JLabel("저장 경로:");
+        noteNameField = new JTextField();
+        passwordField = new JPasswordField();
+        filePathField = new JTextField();
+        filePathField.setEditable(false);
+        browseButton = new JButton("찾아보기");
+        createButton = new JButton("생성");
+        cancelButton = new JButton("취소");
+
+        // 노트 이름
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        add(nameLabel, gbc);
+        gbc.gridx = 1;
+        gbc.gridwidth = 2;
+        gbc.weightx = 1.0;
+        add(noteNameField, gbc);
+        gbc.gridwidth = 1;
+
+        // 비밀번호
+        gbc.gridx = 0;
+        gbc.gridy = 1;
+        add(passwordLabel, gbc);
+        gbc.gridx = 1;
+        gbc.gridwidth = 2;
+        gbc.weightx = 1.0;
+        add(passwordField, gbc);
+        gbc.gridwidth = 1;
+
+        // 저장 경로
+        gbc.gridx = 0;
+        gbc.gridy = 2;
+        add(pathLabel, gbc);
+        gbc.gridx = 1;
+        gbc.weightx = 0.8;
+        add(filePathField, gbc);
+        gbc.gridx = 2;
+        gbc.weightx = 0.2;
+        add(browseButton, gbc);
+
+        // 버튼 패널
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        buttonPanel.add(cancelButton);
+        buttonPanel.add(createButton);
+
+        gbc.gridx = 0;
+        gbc.gridy = 3;
+        gbc.gridwidth = 3;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.anchor = GridBagConstraints.EAST;
+        add(buttonPanel, gbc);
+
+        // 다이얼로그 크기 설정 및 고정
+        Dimension preferredSize = new Dimension((int) (getPreferredSize().width * 2.0), (int) (getPreferredSize().height * 1.5));
+        setPreferredSize(preferredSize);
+        setResizable(false); // 창 크기 변경 불가 설정
+        pack();
+        setLocationRelativeTo(owner);
+
+        // "찾아보기" 버튼 액션 리스너 (기존과 동일)
+        browseButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                FileDialog fileDialog = new FileDialog(NewNoteDialog.this, "저장 경로 선택", FileDialog.SAVE);
+                fileDialog.setVisible(true);
+                String directory = fileDialog.getDirectory();
+                String filename = fileDialog.getFile();
+                if (directory != null && filename != null) {
+                    filePath = directory + filename;
+                    filePathField.setText(filePath);
+                }
+            }
+        });
+
+        // "생성" 버튼 액션 리스너 (기존과 동일)
+        createButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                noteName = noteNameField.getText();
+                password = new String(passwordField.getPassword());
+                filePath = filePathField.getText();
+                if (noteName != null && !noteName.trim().isEmpty() &&
+                    password != null && !password.isEmpty() &&
+                    filePath != null && !filePath.trim().isEmpty()) {
+                    isCreated = true;
+                    setVisible(false);
+                    dispose();
+                } else {
+                    JOptionPane.showMessageDialog(NewNoteDialog.this, "노트 이름, 비밀번호, 저장 경로는 필수 입력 항목입니다.", "입력 오류", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        });
+
+        // "취소" 버튼 액션 리스너 (기존과 동일)
+        cancelButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                isCreated = false;
+                setVisible(false);
+                dispose();
+            }
+        });
+    }
+
+    public boolean isCreated() {
+        return isCreated;
+    }
+
+    public String getNoteName() {
+        return noteName;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public String getFilePath() {
+        return filePath;
+    }
+}
